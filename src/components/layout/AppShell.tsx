@@ -25,6 +25,7 @@ import {
 import { BrandLogo, BrandIcon } from '../brand/BrandLogo';
 import { isSupabaseConfigured } from '../../services/supabaseClient';
 import { CommandPalette } from '../search/CommandPalette';
+import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 
 interface NavItem {
   name: string;
@@ -287,6 +288,8 @@ export const AppShell: React.FC = () => {
 
             {/* Right actions */}
             <div className="flex items-center gap-2 sm:gap-3">
+              <LanguageSwitcher variant="compact" />
+
               <button
                 onClick={() => setIsSearchOpen(true)}
                 className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium bg-[#FAF7F6] border border-[#E2D6D4] text-[#574459] hover:border-[#C8B6B4]"

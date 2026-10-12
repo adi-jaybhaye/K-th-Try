@@ -1,6 +1,7 @@
 // ====================================================================
 // KthTry — Unified Data Repository
 // Transparently handles both Supabase (Cloud) and IndexedDB (Guest)
+// Rigorous error inspection, idempotent writes, dual persistence
 // ====================================================================
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -16,6 +17,17 @@ import {
   MockInterviewRecord,
   PlacementChecklistItem,
 } from '../types/userData';
+
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   id: 'current-user-prefs',
@@ -34,13 +46,43 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   isOnboarded: false,
 };
 
+const DEFAULT_PLACEMENT_TASKS: PlacementChecklistItem[] = [
+  { id: 'p-oop-1', category: 'oop', taskName: '4 Pillars of OOP (Encapsulation, Abstraction, Inheritance, Polymorphism)', isCompleted: false },
+  { id: 'p-oop-2', category: 'oop', taskName: 'Method Overloading vs Overriding & Runtime Dynamic Dispatch', isCompleted: false },
+  { id: 'p-oop-3', category: 'oop', taskName: 'Interfaces vs Abstract Classes in Java (Default & Static methods)', isCompleted: false },
+  { id: 'p-oop-4', category: 'oop', taskName: 'SOLID Principles with practical code examples', isCompleted: false },
+  { id: 'p-dbms-1', category: 'dbms', taskName: 'ACID Properties and Transaction Isolation Levels', isCompleted: false },
+  { id: 'p-dbms-2', category: 'dbms', taskName: 'SQL Joins (INNER, LEFT, RIGHT, FULL) & Group By Having queries', isCompleted: false },
+  { id: 'p-dbms-3', category: 'dbms', taskName: 'Database Indexing: B+ Tree internals & Composite Index leftmost prefix', isCompleted: false },
+  { id: 'p-dbms-4', category: 'dbms', taskName: 'Normalization (1NF, 2NF, 3NF, BCNF) and Denormalization trade-offs', isCompleted: false },
+  { id: 'p-os-1', category: 'os', taskName: 'Process vs Thread, Context Switching, PCB', isCompleted: false },
+  { id: 'p-os-2', category: 'os', taskName: 'CPU Scheduling Algorithms (Round Robin, SJF, Priority)', isCompleted: false },
+  { id: 'p-os-3', category: 'os', taskName: 'Deadlock 4 Coffman conditions and Prevention/Banker algorithm', isCompleted: false },
+  { id: 'p-os-4', category: 'os', taskName: 'Virtual Memory, Paging, Page Faults, LRU Page Replacement', isCompleted: false },
+  { id: 'p-cn-1', category: 'cn', taskName: 'OSI 7 Layers vs TCP/IP 4-Layer Model', isCompleted: false },
+  { id: 'p-cn-2', category: 'cn', taskName: 'TCP 3-Way Handshake, 4-Way Termination, Flow & Congestion Control', isCompleted: false },
+  { id: 'p-cn-3', category: 'cn', taskName: 'DNS Resolution lifecycle & HTTP vs HTTPS (TLS/SSL Handshake)', isCompleted: false },
+  { id: 'p-cn-4', category: 'cn', taskName: 'REST APIs, HTTP Status codes (200, 201, 400, 401, 403, 404, 500)', isCompleted: false },
+  { id: 'p-apt-1', category: 'aptitude', taskName: 'Percentages, Profit & Loss, Simple/Compound Interest speed formulas', isCompleted: false },
+  { id: 'p-apt-2', category: 'aptitude', taskName: 'Time, Speed, Distance, Trains & Relative Velocity calculations', isCompleted: false },
+  { id: 'p-apt-3', category: 'aptitude', taskName: 'Permutations, Combinations & Probability distributions', isCompleted: false },
+  { id: 'p-beh-1', category: 'behavioral', taskName: 'STAR Method framework for technical behavioral questions', isCompleted: false },
+  { id: 'p-beh-2', category: 'behavioral', taskName: '"Tell me about a difficult bug or trade-off you resolved" story', isCompleted: false },
+  { id: 'p-beh-3', category: 'behavioral', taskName: '"Why this company / engineering team?" personalized answer', isCompleted: false },
+];
+
 export class Repository {
   private async getAuthUserId(): Promise<string | null> {
     if (!isSupabaseConfigured() || !supabase) return null;
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.warn('[Repository] Auth getSession error:', error.message);
+        return null;
+      }
       return data?.session?.user?.id || null;
-    } catch {
+    } catch (err: any) {
+      console.warn('[Repository] Unexpected auth error:', err?.message);
       return null;
     }
   }
@@ -53,25 +95,28 @@ export class Repository {
         .from('user_preferences')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (!error && data) {
         return {
           id: data.user_id,
-          goal: data.goal,
-          level: data.level,
-          weeklyHours: data.weekly_hours,
+          goal: data.goal || DEFAULT_PREFERENCES.goal,
+          level: data.level || DEFAULT_PREFERENCES.level,
+          weeklyHours: data.weekly_hours ?? DEFAULT_PREFERENCES.weeklyHours,
           startDate: data.start_date || DEFAULT_PREFERENCES.startDate,
           targetDate: data.target_date || DEFAULT_PREFERENCES.targetDate,
-          planDurationWeeks: data.plan_duration_weeks || 12,
+          planDurationWeeks: data.plan_duration_weeks ?? 12,
           activeDays: data.active_days || DEFAULT_PREFERENCES.activeDays,
           hoursPerDay: data.hours_per_day || DEFAULT_PREFERENCES.hoursPerDay,
           learningPriorities: data.learning_priorities || 'core-first',
           reviewIntervals: data.review_intervals || [1, 7, 21],
           preferredLanguage: data.preferred_language || 'Java',
           theme: data.theme || 'light',
-          isOnboarded: true,
+          isOnboarded: data.is_onboarded ?? true,
         };
+      }
+      if (error) {
+        console.warn('[Repository] Cloud preferences read warning:', error.message);
       }
     }
 
@@ -83,7 +128,7 @@ export class Repository {
   async savePreferences(prefs: UserPreferences): Promise<void> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('user_preferences').upsert({
+      const { error } = await supabase.from('user_preferences').upsert({
         user_id: userId,
         goal: prefs.goal,
         level: prefs.level,
@@ -97,8 +142,12 @@ export class Repository {
         review_intervals: prefs.reviewIntervals,
         preferred_language: prefs.preferredLanguage,
         theme: prefs.theme,
+        is_onboarded: prefs.isOnboarded,
         updated_at: new Date().toISOString(),
       });
+      if (error) {
+        console.warn('[Repository] Cloud savePreferences warning:', error.message);
+      }
     }
 
     // Always mirror to guest storage as well
@@ -109,19 +158,24 @@ export class Repository {
   async getAllTopicProgress(): Promise<Record<string, TopicProgress>> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      const { data } = await supabase.from('user_topic_progress').select('*').eq('user_id', userId);
-      const map: Record<string, TopicProgress> = {};
-      data?.forEach((row) => {
-        map[row.topic_id] = {
-          id: row.topic_id,
-          topicId: row.topic_id,
-          isCompleted: row.is_completed,
-          masteryPercentage: row.mastery_percentage,
-          lastStudiedAt: row.last_studied_at,
-          notes: row.notes,
-        };
-      });
-      return map;
+      const { data, error } = await supabase.from('user_topic_progress').select('*').eq('user_id', userId);
+      if (!error && data) {
+        const map: Record<string, TopicProgress> = {};
+        data.forEach((row) => {
+          map[row.topic_id] = {
+            id: row.topic_id,
+            topicId: row.topic_id,
+            isCompleted: row.is_completed,
+            masteryPercentage: row.mastery_percentage,
+            lastStudiedAt: row.last_studied_at,
+            notes: row.notes,
+          };
+        });
+        return map;
+      }
+      if (error) {
+        console.warn('[Repository] Cloud topic progress read warning:', error.message);
+      }
     }
 
     const items = await guestStorage.getAll<TopicProgress>('topic_progress');
@@ -135,7 +189,7 @@ export class Repository {
   async saveTopicProgress(progress: TopicProgress): Promise<void> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('user_topic_progress').upsert({
+      const { error } = await supabase.from('user_topic_progress').upsert({
         user_id: userId,
         topic_id: progress.topicId,
         is_completed: progress.isCompleted,
@@ -144,6 +198,9 @@ export class Repository {
         notes: progress.notes,
         updated_at: new Date().toISOString(),
       });
+      if (error) {
+        console.warn('[Repository] Cloud saveTopicProgress warning:', error.message);
+      }
     }
 
     await guestStorage.put('topic_progress', { ...progress, id: progress.topicId });
@@ -153,17 +210,22 @@ export class Repository {
   async getAllSubtopicProgress(): Promise<Record<string, SubtopicProgress>> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      const { data } = await supabase.from('user_subtopic_progress').select('*').eq('user_id', userId);
-      const map: Record<string, SubtopicProgress> = {};
-      data?.forEach((row) => {
-        map[row.subtopic_id] = {
-          id: row.subtopic_id,
-          subtopicId: row.subtopic_id,
-          checklistCompleted: row.checklist_completed || [],
-          isCompleted: row.is_completed,
-        };
-      });
-      return map;
+      const { data, error } = await supabase.from('user_subtopic_progress').select('*').eq('user_id', userId);
+      if (!error && data) {
+        const map: Record<string, SubtopicProgress> = {};
+        data.forEach((row) => {
+          map[row.subtopic_id] = {
+            id: row.subtopic_id,
+            subtopicId: row.subtopic_id,
+            checklistCompleted: row.checklist_completed || [],
+            isCompleted: row.is_completed,
+          };
+        });
+        return map;
+      }
+      if (error) {
+        console.warn('[Repository] Cloud subtopic progress read warning:', error.message);
+      }
     }
 
     const items = await guestStorage.getAll<SubtopicProgress>('subtopic_progress');
@@ -184,13 +246,16 @@ export class Repository {
 
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('user_subtopic_progress').upsert({
+      const { error } = await supabase.from('user_subtopic_progress').upsert({
         user_id: userId,
         subtopic_id: subtopicId,
         checklist_completed: checklistCompleted,
         is_completed: isCompleted,
         updated_at: new Date().toISOString(),
       });
+      if (error) {
+        console.warn('[Repository] Cloud saveSubtopicProgress warning:', error.message);
+      }
     }
 
     await guestStorage.put('subtopic_progress', payload);
@@ -200,19 +265,25 @@ export class Repository {
   async getAllProblemProgress(): Promise<Record<string, ProblemProgress>> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      const { data } = await supabase.from('user_problem_progress').select('*').eq('user_id', userId);
-      const map: Record<string, ProblemProgress> = {};
-      data?.forEach((row) => {
-        map[row.problem_id] = {
-          id: row.problem_id,
-          problemId: row.problem_id,
-          status: row.status,
-          notes: row.notes,
-          nextReviewDate: row.next_review_date,
-          reviewCount: row.review_count,
-        };
-      });
-      return map;
+      const { data, error } = await supabase.from('user_problem_progress').select('*').eq('user_id', userId);
+      if (!error && data) {
+        const map: Record<string, ProblemProgress> = {};
+        data.forEach((row) => {
+          map[row.problem_id] = {
+            id: row.problem_id,
+            problemId: row.problem_id,
+            status: row.status,
+            notes: row.notes,
+            nextReviewDate: row.next_review_date,
+            reviewCount: row.review_count,
+            language: row.language,
+          };
+        });
+        return map;
+      }
+      if (error) {
+        console.warn('[Repository] Cloud problem progress read warning:', error.message);
+      }
     }
 
     const items = await guestStorage.getAll<ProblemProgress>('problem_progress');
@@ -226,15 +297,19 @@ export class Repository {
   async saveProblemProgress(progress: ProblemProgress): Promise<void> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('user_problem_progress').upsert({
+      const { error } = await supabase.from('user_problem_progress').upsert({
         user_id: userId,
         problem_id: progress.problemId,
         status: progress.status,
         notes: progress.notes,
         next_review_date: progress.nextReviewDate,
         review_count: progress.reviewCount,
+        language: progress.language || 'Java',
         updated_at: new Date().toISOString(),
       });
+      if (error) {
+        console.warn('[Repository] Cloud saveProblemProgress warning:', error.message);
+      }
     }
 
     await guestStorage.put('problem_progress', { ...progress, id: progress.problemId });
@@ -243,13 +318,13 @@ export class Repository {
   async getAllAttempts(): Promise<ProblemAttempt[]> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('problem_attempts')
         .select('*')
         .eq('user_id', userId)
         .order('attempted_at', { ascending: false });
 
-      if (data) {
+      if (!error && data) {
         return data.map((row) => ({
           id: row.id,
           problemId: row.problem_id,
@@ -260,7 +335,12 @@ export class Repository {
           approachNotes: row.approach_notes,
           mistakesEncountered: row.mistakes_encountered,
           attemptedAt: row.attempted_at,
+          language: row.language || 'Java',
+          clientId: row.client_id,
         }));
+      }
+      if (error) {
+        console.warn('[Repository] Cloud attempts read warning:', error.message);
       }
     }
 
@@ -268,15 +348,20 @@ export class Repository {
   }
 
   async recordAttempt(attempt: Omit<ProblemAttempt, 'id' | 'attemptedAt'>): Promise<ProblemAttempt> {
+    const attemptId = generateUUID();
+    const timestamp = new Date().toISOString();
     const newAttempt: ProblemAttempt = {
       ...attempt,
-      id: 'att_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-      attemptedAt: new Date().toISOString(),
+      id: attemptId,
+      clientId: attempt.clientId || attemptId,
+      language: attempt.language || 'Java',
+      attemptedAt: timestamp,
     };
 
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('problem_attempts').insert({
+      const { error } = await supabase.from('problem_attempts').insert({
+        id: newAttempt.id,
         user_id: userId,
         problem_id: newAttempt.problemId,
         attempt_status: newAttempt.attemptStatus,
@@ -285,8 +370,13 @@ export class Repository {
         editorial_used: newAttempt.editorialUsed,
         approach_notes: newAttempt.approachNotes,
         mistakes_encountered: newAttempt.mistakesEncountered,
+        language: newAttempt.language,
+        client_id: newAttempt.clientId,
         attempted_at: newAttempt.attemptedAt,
       });
+      if (error) {
+        console.warn('[Repository] Cloud recordAttempt warning:', error.message);
+      }
     }
 
     await guestStorage.put('problem_attempts', newAttempt);
@@ -297,6 +387,7 @@ export class Repository {
       problemId: newAttempt.problemId,
       status: newAttempt.attemptStatus,
       reviewCount: 0,
+      language: newAttempt.language,
     };
 
     const reviewIntervalDays =
@@ -312,6 +403,7 @@ export class Repository {
       reviewCount: (currentProgress.reviewCount || 0) + 1,
       nextReviewDate: nextReview,
       lastAttemptedAt: newAttempt.attemptedAt,
+      language: newAttempt.language,
     };
 
     await this.saveProblemProgress(updatedProgress);
@@ -326,13 +418,13 @@ export class Repository {
   async getTimelineTasks(): Promise<TimelineTask[]> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('timeline_tasks')
         .select('*')
         .eq('user_id', userId)
         .order('scheduled_date', { ascending: true });
 
-      if (data) {
+      if (!error && data) {
         return data.map((row) => ({
           id: row.id,
           studyPlanId: row.study_plan_id,
@@ -344,7 +436,11 @@ export class Repository {
           status: row.status,
           orderIndex: row.order_index,
           notes: row.notes,
+          clientId: row.client_id,
         }));
+      }
+      if (error) {
+        console.warn('[Repository] Cloud timeline tasks read warning:', error.message);
       }
     }
 
@@ -352,11 +448,21 @@ export class Repository {
   }
 
   async saveTimelineTasks(tasks: TimelineTask[]): Promise<void> {
+    const isUUIDRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const preparedTasks = tasks.map((t) => {
+      const hasValidUUID = isUUIDRegex.test(t.id);
+      const stableId = hasValidUUID ? t.id : generateUUID();
+      return {
+        ...t,
+        id: stableId,
+        clientId: t.clientId || t.id,
+      };
+    });
+
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      // Upsert batch in Supabase
-      const payload = tasks.map((t) => ({
-        id: t.id.startsWith('task_') ? undefined : t.id,
+      const payload = preparedTasks.map((t) => ({
+        id: t.id,
         user_id: userId,
         title: t.title,
         topic_id: t.topicId,
@@ -365,11 +471,15 @@ export class Repository {
         task_type: t.taskType,
         status: t.status,
         order_index: t.orderIndex,
+        client_id: t.clientId,
       }));
-      await supabase.from('timeline_tasks').upsert(payload);
+      const { error } = await supabase.from('timeline_tasks').upsert(payload, { onConflict: 'id' });
+      if (error) {
+        console.warn('[Repository] Cloud saveTimelineTasks warning:', error.message);
+      }
     }
 
-    for (const t of tasks) {
+    for (const t of preparedTasks) {
       await guestStorage.put('timeline_tasks', t);
     }
   }
@@ -383,13 +493,16 @@ export class Repository {
 
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('timeline_tasks').update({
+      const { error } = await supabase.from('timeline_tasks').update({
         scheduled_date: updated.scheduledDate,
         status: updated.status,
         duration_minutes: updated.durationMinutes,
         order_index: updated.orderIndex,
         updated_at: new Date().toISOString(),
       }).eq('id', taskId).eq('user_id', userId);
+      if (error) {
+        console.warn('[Repository] Cloud updateTimelineTask warning:', error.message);
+      }
     }
 
     await guestStorage.put('timeline_tasks', updated);
@@ -399,13 +512,13 @@ export class Repository {
   async getRevisionTasks(): Promise<RevisionTask[]> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('revision_tasks')
         .select('*')
         .eq('user_id', userId)
         .order('due_date', { ascending: true });
 
-      if (data) {
+      if (!error && data) {
         return data.map((r) => ({
           id: r.id,
           problemId: r.problem_id,
@@ -415,13 +528,16 @@ export class Repository {
           completedAt: r.completed_at,
         }));
       }
+      if (error) {
+        console.warn('[Repository] Cloud revision tasks read warning:', error.message);
+      }
     }
 
     return await guestStorage.getAll<RevisionTask>('revision_tasks');
   }
 
   async scheduleRevision(problemId: string, dueDate: string, intervalDays: number): Promise<void> {
-    const id = 'rev_' + problemId + '_' + Date.now();
+    const id = generateUUID();
     const task: RevisionTask = {
       id,
       problemId,
@@ -432,13 +548,17 @@ export class Repository {
 
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('revision_tasks').insert({
+      const { error } = await supabase.from('revision_tasks').insert({
+        id,
         user_id: userId,
         problem_id: problemId,
         due_date: dueDate,
         interval_days: intervalDays,
         status: 'due',
       });
+      if (error) {
+        console.warn('[Repository] Cloud scheduleRevision warning:', error.message);
+      }
     }
 
     await guestStorage.put('revision_tasks', task);
@@ -457,11 +577,14 @@ export class Repository {
 
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase
+      const { error } = await supabase
         .from('revision_tasks')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', revisionId)
         .eq('user_id', userId);
+      if (error) {
+        console.warn('[Repository] Cloud completeRevision warning:', error.message);
+      }
     }
 
     await guestStorage.put('revision_tasks', updated);
@@ -471,13 +594,13 @@ export class Repository {
   async getMockInterviews(): Promise<MockInterviewRecord[]> {
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('mock_interviews')
         .select('*')
         .eq('user_id', userId)
         .order('conducted_at', { ascending: false });
 
-      if (data) {
+      if (!error && data) {
         return data.map((m) => ({
           id: m.id,
           topic: m.topic,
@@ -492,21 +615,27 @@ export class Repository {
           conductedAt: m.conducted_at,
         }));
       }
+      if (error) {
+        console.warn('[Repository] Cloud mock interviews read warning:', error.message);
+      }
     }
 
     return await guestStorage.getAll<MockInterviewRecord>('mock_interviews');
   }
 
   async saveMockInterview(interview: Omit<MockInterviewRecord, 'id' | 'conductedAt'>): Promise<MockInterviewRecord> {
+    const id = generateUUID();
+    const conductedAt = new Date().toISOString();
     const record: MockInterviewRecord = {
       ...interview,
-      id: 'mock_' + Date.now(),
-      conductedAt: new Date().toISOString(),
+      id,
+      conductedAt,
     };
 
     const userId = await this.getAuthUserId();
     if (userId && supabase) {
-      await supabase.from('mock_interviews').insert({
+      const { error } = await supabase.from('mock_interviews').insert({
+        id,
         user_id: userId,
         topic: record.topic,
         duration_minutes: record.durationMinutes,
@@ -515,51 +644,67 @@ export class Repository {
         code_content: record.codeContent,
         feedback_notes: record.feedbackNotes,
         communication_score: record.communicationScore,
-        problem_solving_score: record.problemSolvingScore,
+        problemSolvingScore: record.problemSolvingScore,
         code_quality_score: record.codeQualityScore,
         conducted_at: record.conductedAt,
       });
+      if (error) {
+        console.warn('[Repository] Cloud saveMockInterview warning:', error.message);
+      }
     }
 
     await guestStorage.put('mock_interviews', record);
     return record;
   }
 
-  // 8. PLACEMENT PREPARATION CHECKLISTS
+  // 8. PLACEMENT PREPARATION CHECKLISTS (DUAL PERSISTENCE: CLOUD + GUEST)
   async getPlacementTasks(): Promise<PlacementChecklistItem[]> {
+    const userId = await this.getAuthUserId();
+    if (userId && supabase) {
+      const { data, error } = await supabase
+        .from('placement_tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        return data.map((row) => ({
+          id: row.notes?.startsWith('seed_id:') ? row.notes.replace('seed_id:', '') : row.id,
+          category: row.category,
+          taskName: row.task_name,
+          isCompleted: row.is_completed,
+          notes: row.notes,
+        }));
+      }
+      if (error) {
+        console.warn('[Repository] Cloud placement tasks read warning:', error.message);
+      }
+    }
+
     const items = await guestStorage.getAll<PlacementChecklistItem>('placement_tasks');
     if (items.length > 0) return items;
 
     // Seed defaults for placement prep
-    const defaults: PlacementChecklistItem[] = [
-      { id: 'p-oop-1', category: 'oop', taskName: '4 Pillars of OOP (Encapsulation, Abstraction, Inheritance, Polymorphism)', isCompleted: false },
-      { id: 'p-oop-2', category: 'oop', taskName: 'Method Overloading vs Overriding & Runtime Dynamic Dispatch', isCompleted: false },
-      { id: 'p-oop-3', category: 'oop', taskName: 'Interfaces vs Abstract Classes in Java (Default & Static methods)', isCompleted: false },
-      { id: 'p-oop-4', category: 'oop', taskName: 'SOLID Principles with practical code examples', isCompleted: false },
-      { id: 'p-dbms-1', category: 'dbms', taskName: 'ACID Properties and Transaction Isolation Levels', isCompleted: false },
-      { id: 'p-dbms-2', category: 'dbms', taskName: 'SQL Joins (INNER, LEFT, RIGHT, FULL) & Group By Having queries', isCompleted: false },
-      { id: 'p-dbms-3', category: 'dbms', taskName: 'Database Indexing: B+ Tree internals & Composite Index leftmost prefix', isCompleted: false },
-      { id: 'p-dbms-4', category: 'dbms', taskName: 'Normalization (1NF, 2NF, 3NF, BCNF) and Denormalization trade-offs', isCompleted: false },
-      { id: 'p-os-1', category: 'os', taskName: 'Process vs Thread, Context Switching, PCB', isCompleted: false },
-      { id: 'p-os-2', category: 'os', taskName: 'CPU Scheduling Algorithms (Round Robin, SJF, Priority)', isCompleted: false },
-      { id: 'p-os-3', category: 'os', taskName: 'Deadlock 4 Coffman conditions and Prevention/Banker algorithm', isCompleted: false },
-      { id: 'p-os-4', category: 'os', taskName: 'Virtual Memory, Paging, Page Faults, LRU Page Replacement', isCompleted: false },
-      { id: 'p-cn-1', category: 'cn', taskName: 'OSI 7 Layers vs TCP/IP 4-Layer Model', isCompleted: false },
-      { id: 'p-cn-2', category: 'cn', taskName: 'TCP 3-Way Handshake, 4-Way Termination, Flow & Congestion Control', isCompleted: false },
-      { id: 'p-cn-3', category: 'cn', taskName: 'DNS Resolution lifecycle & HTTP vs HTTPS (TLS/SSL Handshake)', isCompleted: false },
-      { id: 'p-cn-4', category: 'cn', taskName: 'REST APIs, HTTP Status codes (200, 201, 400, 401, 403, 404, 500)', isCompleted: false },
-      { id: 'p-apt-1', category: 'aptitude', taskName: 'Percentages, Profit & Loss, Simple/Compound Interest speed formulas', isCompleted: false },
-      { id: 'p-apt-2', category: 'aptitude', taskName: 'Time, Speed, Distance, Trains & Relative Velocity calculations', isCompleted: false },
-      { id: 'p-apt-3', category: 'aptitude', taskName: 'Permutations, Combinations & Probability distributions', isCompleted: false },
-      { id: 'p-beh-1', category: 'behavioral', taskName: 'STAR Method framework for technical behavioral questions', isCompleted: false },
-      { id: 'p-beh-2', category: 'behavioral', taskName: '"Tell me about a difficult bug or trade-off you resolved" story', isCompleted: false },
-      { id: 'p-beh-3', category: 'behavioral', taskName: '"Why this company / engineering team?" personalized answer', isCompleted: false },
-    ];
-
-    for (const d of defaults) {
+    for (const d of DEFAULT_PLACEMENT_TASKS) {
       await guestStorage.put('placement_tasks', d);
     }
-    return defaults;
+
+    // If authenticated, also seed into Supabase
+    if (userId && supabase) {
+      const cloudPayload = DEFAULT_PLACEMENT_TASKS.map((d) => ({
+        user_id: userId,
+        category: d.category,
+        task_name: d.taskName,
+        is_completed: d.isCompleted,
+        notes: 'seed_id:' + d.id,
+      }));
+      const { error } = await supabase.from('placement_tasks').insert(cloudPayload);
+      if (error) {
+        console.warn('[Repository] Cloud seed placement tasks warning:', error.message);
+      }
+    }
+
+    return DEFAULT_PLACEMENT_TASKS;
   }
 
   async togglePlacementTask(taskId: string, isCompleted: boolean): Promise<void> {
@@ -569,11 +714,63 @@ export class Repository {
 
     const updated = { ...task, isCompleted };
     await guestStorage.put('placement_tasks', updated);
+
+    const userId = await this.getAuthUserId();
+    if (userId && supabase) {
+      // Find matching cloud task by notes 'seed_id:...' or by id
+      const { data } = await supabase
+        .from('placement_tasks')
+        .select('id, notes')
+        .eq('user_id', userId);
+
+      const matchingRow = data?.find((r) => r.id === taskId || r.notes === 'seed_id:' + taskId);
+      if (matchingRow) {
+        const { error } = await supabase
+          .from('placement_tasks')
+          .update({ is_completed: isCompleted, updated_at: new Date().toISOString() })
+          .eq('id', matchingRow.id)
+          .eq('user_id', userId);
+        if (error) {
+          console.warn('[Repository] Cloud togglePlacementTask warning:', error.message);
+        }
+      }
+    }
   }
 
-  // Clear / Reset All Data
-  async clearAllData(): Promise<void> {
+  // 9. DATA RESET & ISOLATION
+  async clearGuestData(): Promise<void> {
     await guestStorage.clearAll();
+  }
+
+  async deleteCloudUserData(): Promise<{ success: boolean; error?: string }> {
+    const userId = await this.getAuthUserId();
+    if (!userId || !supabase) {
+      return { success: false, error: 'No active authenticated session' };
+    }
+
+    try {
+      await Promise.all([
+        supabase.from('user_topic_progress').delete().eq('user_id', userId),
+        supabase.from('user_subtopic_progress').delete().eq('user_id', userId),
+        supabase.from('user_problem_progress').delete().eq('user_id', userId),
+        supabase.from('problem_attempts').delete().eq('user_id', userId),
+        supabase.from('timeline_tasks').delete().eq('user_id', userId),
+        supabase.from('revision_tasks').delete().eq('user_id', userId),
+        supabase.from('mock_interviews').delete().eq('user_id', userId),
+        supabase.from('placement_tasks').delete().eq('user_id', userId),
+      ]);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Cloud deletion failed' };
+    }
+  }
+
+  async clearAllData(): Promise<void> {
+    await this.clearGuestData();
+    const userId = await this.getAuthUserId();
+    if (userId && supabase) {
+      await this.deleteCloudUserData();
+    }
   }
 }
 

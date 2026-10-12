@@ -9,7 +9,7 @@ export type ResourceAccess = 'free' | 'free-account' | 'partially-free' | 'paid-
 export interface ResourceItem {
   id: string;
   title: string;
-  provider: string; // e.g., 'Striver A2Z', 'LeetCode', 'GeeksforGeeks', 'VisuAlgo', 'Oracle Java'
+  provider: string; // e.g., 'Striver A2Z', 'LeetCode', 'GeeksforGeeks', 'VisuAlgo', 'Oracle Java', 'cppreference', 'NeetCode'
   url: string;
   type: 'article' | 'video' | 'interactive' | 'roadmap' | 'documentation';
   access: ResourceAccess;
@@ -17,6 +17,9 @@ export interface ResourceItem {
   verified: boolean;
   verifiedDate?: string;
   notes?: string;
+  language?: 'java' | 'cpp' | 'python' | 'all';
+  spokenLanguage?: string; // 'English' | 'Hindi'
+  purpose?: 'concept' | 'implementation' | 'interview-pattern' | 'reference';
 }
 
 export interface PracticeProblem {
@@ -37,8 +40,18 @@ export interface SubtopicItem {
   description: string;
   keyPoints: string[];
   javaSnippet?: string;
+  cppSnippet?: string;
+  pythonSnippet?: string;
   commonPitfalls?: string[];
   checklistItems: string[];
+}
+
+export interface LanguageImplementationNotes {
+  language?: 'Java' | 'C++' | 'Python';
+  coreDataStructures: string;
+  tricks: string[];
+  gotchas: string[];
+  codeTemplate: string;
 }
 
 export interface TopicModule {
@@ -59,12 +72,9 @@ export interface TopicModule {
     space: string;
     intuition: string;
   };
-  javaImplementationNotes: {
-    coreDataStructures: string;
-    tricks: string[];
-    gotchas: string[];
-    codeTemplate: string;
-  };
+  javaImplementationNotes: LanguageImplementationNotes;
+  cppImplementationNotes?: LanguageImplementationNotes;
+  pythonImplementationNotes?: LanguageImplementationNotes;
   commonMistakes: string[];
   boundaryCases: string[];
   subtopics: SubtopicItem[];
@@ -72,13 +82,16 @@ export interface TopicModule {
   practiceProblems: PracticeProblem[];
 }
 
-export interface JavaEssentialTopic {
+export interface LanguageEssentialTopic {
   id: string;
+  language?: 'Java' | 'C++' | 'Python';
   title: string;
-  category: 'Primitives & Memory' | 'Collections Framework' | 'Comparators & Lambdas' | 'Strings & I/O' | 'Recursion & Stack';
+  category: string;
   description: string;
   keyRules: string[];
   codeExample: string;
   complexityCost: string;
   interviewTip: string;
 }
+
+export type JavaEssentialTopic = LanguageEssentialTopic;

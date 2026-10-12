@@ -12,11 +12,15 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../co
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { curriculumModules } from '../data/curriculumData';
+import { verifiedMultiLangResources } from '../data/multiLangResourcesData';
 import { ResourceItem } from '../types/curriculum';
+import { useLanguage } from '../services/LanguageContext';
 
 export const ResourcesPage: React.FC = () => {
+  const { activeLanguage } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string>('ALL');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('ALL');
   const [savedResourceIds, setSavedResourceIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('kthtry_saved_resources');
@@ -26,7 +30,7 @@ export const ResourcesPage: React.FC = () => {
     }
   });
 
-  // Extract all resources from modules + add official company guidance resources
+  // Company guidance + curriculum resources + multi-language resources
   const officialGuides: ResourceItem[] = [
     {
       id: 'res-msft-guide',
@@ -37,6 +41,7 @@ export const ResourcesPage: React.FC = () => {
       access: 'free',
       order: 1,
       verified: true,
+      language: 'all',
       notes: 'Clarify ambiguity, think aloud, discuss trade-offs and alternative approaches.',
     },
     {
@@ -48,6 +53,7 @@ export const ResourcesPage: React.FC = () => {
       access: 'free',
       order: 2,
       verified: true,
+      language: 'all',
       notes: 'Focus on clean code, edge cases, space/time complexity, and customer obsession.',
     },
     {
@@ -59,6 +65,7 @@ export const ResourcesPage: React.FC = () => {
       access: 'free',
       order: 3,
       verified: true,
+      language: 'all',
     },
     {
       id: 'res-opendsa',
@@ -69,11 +76,13 @@ export const ResourcesPage: React.FC = () => {
       access: 'free',
       order: 4,
       verified: true,
+      language: 'all',
     },
   ];
 
   const allResources: ResourceItem[] = [
     ...officialGuides,
+    ...verifiedMultiLangResources,
     ...curriculumModules.flatMap((m) => m.resources),
   ];
 
@@ -81,6 +90,10 @@ export const ResourcesPage: React.FC = () => {
 
   const filteredResources = allResources.filter((r) => {
     if (selectedProvider !== 'ALL' && r.provider !== selectedProvider) return false;
+    if (selectedLanguage !== 'ALL') {
+      const target = selectedLanguage.toLowerCase();
+      if (r.language && r.language !== 'all' && r.language !== target) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -105,7 +118,7 @@ export const ResourcesPage: React.FC = () => {
       {/* HEADER */}
       <div className="pb-4 border-b border-[#F0EAE8]">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#AE445A] mb-1">
-          <span>Curated Knowledge Base</span>
+          <span>Curated Multi-Language Knowledge Base</span>
           <span>·</span>
           <span>Reputable &amp; Verified Only</span>
         </div>
@@ -113,32 +126,53 @@ export const ResourcesPage: React.FC = () => {
           Learning Resource Library
         </h1>
         <p className="text-xs sm:text-sm text-[#7E6C7C] mt-1 max-w-3xl">
-          Direct, verified reference starting points from Striver A2Z, LeetCode, VisuAlgo, Oracle Java documentation, and official Microsoft &amp; Amazon technical interview guides.
+          Direct, verified reference starting points across Java, C++, and Python from Take U Forward (Striver), Love Babbar (CodeHelp), freeCodeCamp, NeetCode, cppreference, Python Docs, and Oracle Java.
         </p>
       </div>
 
-      {/* SEARCH & PROVIDER FILTERS */}
-      <div className="p-4 rounded-2xl bg-[#FFFDFC] border border-[#F0EAE8] flex flex-wrap items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-[#7E6C7C] absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Search guides, providers, topics..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white border border-[#E2D6D4] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#1D1A39] focus:outline-none focus:ring-2 focus:ring-[#451952]"
-          />
+      {/* SEARCH & LANGUAGE / PROVIDER FILTERS */}
+      <div className="p-4 rounded-2xl bg-[#FFFDFC] border border-[#F0EAE8] space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-[#7E6C7C] absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search guides, providers, topics..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white border border-[#E2D6D4] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#1D1A39] focus:outline-none focus:ring-2 focus:ring-[#451952]"
+            />
+          </div>
+
+          {/* Language Track Filter */}
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-[#7E6C7C] mr-1 font-semibold">Track:</span>
+            {['ALL', 'Java', 'C++', 'Python'].map((lang) => (
+              <button
+                key={lang}
+                onClick={() => setSelectedLanguage(lang)}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  selectedLanguage === lang
+                    ? 'bg-[#1D1A39] text-white shadow-xs'
+                    : 'bg-[#FAF7F6] border border-[#E2D6D4] text-[#574459] hover:bg-[#F3ECE9]'
+                }`}
+              >
+                {lang}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto text-xs py-1">
-          <span className="text-[#7E6C7C] mr-1">Provider:</span>
+        {/* Providers scroll */}
+        <div className="flex items-center gap-1.5 overflow-x-auto text-xs pt-1 border-t border-[#F0EAE8]">
+          <span className="text-[#7E6C7C] mr-1 shrink-0">Provider:</span>
           {providers.map((p) => (
             <button
               key={p}
               onClick={() => setSelectedProvider(p)}
               className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap transition-all ${
                 selectedProvider === p
-                  ? 'bg-[#1D1A39] text-white'
+                  ? 'bg-[#451952] text-white'
                   : 'bg-[#FAF7F6] border border-[#E2D6D4] text-[#574459] hover:bg-[#F3ECE9]'
               }`}
             >
@@ -159,6 +193,11 @@ export const ResourcesPage: React.FC = () => {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-[#AE445A]">{res.provider}</span>
                   <div className="flex items-center gap-2">
+                    {res.language && res.language !== 'all' && (
+                      <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-[#FAF7F6] text-[#451952] border border-[#E2D6D4]">
+                        {res.language}
+                      </span>
+                    )}
                     {res.verified && (
                       <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" /> Verified
@@ -190,6 +229,12 @@ export const ResourcesPage: React.FC = () => {
                   <span className="capitalize">{res.type}</span>
                   <span>·</span>
                   <span className="capitalize">{res.access.replace('-', ' ')}</span>
+                  {res.spokenLanguage && (
+                    <>
+                      <span>·</span>
+                      <span>Audio: {res.spokenLanguage}</span>
+                    </>
+                  )}
                 </div>
               </div>
 

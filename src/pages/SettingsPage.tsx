@@ -12,20 +12,25 @@ import {
   Sun,
   ShieldCheck,
   RefreshCw,
+  Code2,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
 import { repository } from '../services/repository';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { exportUserData, importUserData, ImportValidationResult } from '../services/backupService';
 import { migrateGuestDataToAccount } from '../services/migrationService';
 import { UserPreferences } from '../types/userData';
+import { useLanguage } from '../services/LanguageContext';
 
 export const SettingsPage: React.FC = () => {
+  const { activeLanguage } = useLanguage();
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetType, setResetType] = useState<'guest' | 'cloud'>('guest');
   const [isExporting, setIsExporting] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportValidationResult | null>(null);
   const [isMigrating, setIsMigrating] = useState(false);
@@ -35,7 +40,7 @@ export const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     repository.getPreferences().then(setPreferences);
-  }, []);
+  }, [activeLanguage]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -71,8 +76,12 @@ export const SettingsPage: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const handleResetData = async () => {
-    await repository.clearAllData();
+  const handleConfirmReset = async () => {
+    if (resetType === 'guest') {
+      await repository.clearGuestData();
+    } else {
+      await repository.deleteCloudUserData();
+    }
     setIsResetModalOpen(false);
     window.location.reload();
   };
@@ -85,7 +94,10 @@ export const SettingsPage: React.FC = () => {
       if (result.success) {
         setMigrationStatus(`Successfully merged ${result.topicsMigrated} topics and ${result.attemptsMigrated} attempts to your Supabase account!`);
       } else {
-        setMigrationStatus(`Migration notice: ${result.error}`);
+        const failureDetails = result.partialFailures.length > 0
+          ? ` (Issues in: ${result.partialFailures.join(', ')})`
+          : '';
+        setMigrationStatus(`Migration notice: ${result.error || 'Partial completion'}${failureDetails}`);
       }
     } catch (err: any) {
       setMigrationStatus(`Error: ${err?.message || 'Migration failed'}`);
@@ -102,9 +114,28 @@ export const SettingsPage: React.FC = () => {
           Settings &amp; Data Management
         </h1>
         <p className="text-xs sm:text-sm text-[#7E6C7C] mt-1">
-          Control your storage engines, export validated backups, and manage privacy.
+          Customize your programming language track, storage engines, backups, and privacy controls.
         </p>
       </div>
+
+      {/* ACTIVE LANGUAGE TRACK CONFIGURATION */}
+      <Card className="p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2.5 rounded-2xl bg-[#451952]/10 text-[#451952]">
+            <Code2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-base text-[#1D1A39]">
+              Active Programming Language Track
+            </h3>
+            <p className="text-xs text-[#7E6C7C] mt-0.5">
+              Select your primary language for code templates, library guides, and interview implementation notes.
+            </p>
+          </div>
+        </div>
+
+        <LanguageSwitcher variant="cards" />
+      </Card>
 
       {/* CLOUD & BACKEND STATUS */}
       <Card className="p-6">
@@ -163,7 +194,7 @@ export const SettingsPage: React.FC = () => {
       <Card className="p-6">
         <CardTitle className="text-base mb-1">Data Backup &amp; Portability</CardTitle>
         <CardDescription className="mb-4">
-          Export your entire preparation history to a standard JSON format or restore from an existing backup.
+          Export your entire preparation history to a validated JSON format or restore from an existing backup.
         </CardDescription>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -193,7 +224,7 @@ export const SettingsPage: React.FC = () => {
             <div>
               <h4 className="font-bold text-sm text-[#1D1A39]">Restore from Backup</h4>
               <p className="text-xs text-[#7E6C7C] mt-1">
-                Upload a previously saved <code className="font-mono">.json</code> file to restore your progress.
+                Upload a previously saved <code className="font-mono">.json</code> file to restore your progress with schema validation.
               </p>
             </div>
             <div className="mt-4">
@@ -225,24 +256,42 @@ export const SettingsPage: React.FC = () => {
         )}
       </Card>
 
-      {/* DANGER ZONE: RESET GUEST DATA */}
-      <Card className="p-6 border-rose-200 bg-rose-50/10">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h4 className="font-bold text-sm text-rose-950 flex items-center gap-2">
-              <Trash2 className="w-4 h-4 text-rose-600" /> Reset Local Workspace
-            </h4>
-            <p className="text-xs text-[#7E6C7C] mt-1 max-w-xl">
-              Permanently erase all locally stored attempts, checklists, and timelines from this browser. This cannot be undone unless you have an exported backup.
-            </p>
-          </div>
+      {/* DANGER ZONE: EXPLICIT GUEST VS CLOUD DATA RESETS */}
+      <Card className="p-6 border-rose-200 bg-rose-50/10 space-y-4">
+        <div>
+          <h4 className="font-bold text-sm text-rose-950 flex items-center gap-2">
+            <Trash2 className="w-4 h-4 text-rose-600" /> Workspace Isolation &amp; Data Resets
+          </h4>
+          <p className="text-xs text-[#7E6C7C] mt-1">
+            Carefully scope your deletions. You can choose whether to reset local IndexedDB guest records or wipe your authenticated cloud account data.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3 pt-2">
           <Button
-            variant="danger"
+            variant="outline"
             size="sm"
-            onClick={() => setIsResetModalOpen(true)}
+            className="border-rose-300 text-rose-700 hover:bg-rose-50"
+            onClick={() => {
+              setResetType('guest');
+              setIsResetModalOpen(true);
+            }}
           >
-            Clear All Data
+            Reset Local Guest Storage
           </Button>
+
+          {isCloud && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                setResetType('cloud');
+                setIsResetModalOpen(true);
+              }}
+            >
+              Delete Cloud Account Data
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -250,19 +299,21 @@ export const SettingsPage: React.FC = () => {
       <Modal
         isOpen={isResetModalOpen}
         onClose={() => setIsResetModalOpen(false)}
-        title="Confirm Workspace Reset"
-        description="Are you completely sure you want to erase your study data?"
+        title={resetType === 'guest' ? 'Confirm Local Workspace Reset' : 'Confirm Cloud Data Deletion'}
+        description={`Are you completely sure you want to erase ${resetType === 'guest' ? 'local browser storage' : 'your authenticated cloud records'}?`}
       >
         <div className="space-y-4">
           <p className="text-xs text-[#574459] leading-relaxed">
-            This action will clear all your locally recorded problem attempts, checklists, study plans, and custom tasks.
+            {resetType === 'guest'
+              ? 'This will clear all problem attempts, checklists, study plans, and custom tasks stored in this browser\'s IndexedDB.'
+              : 'This will permanently delete all your problem attempts, checklists, and timelines from the Supabase cloud database.'}
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" size="sm" onClick={() => setIsResetModalOpen(false)}>
               Cancel
             </Button>
-            <Button variant="danger" size="sm" onClick={handleResetData}>
-              Yes, Erase Everything
+            <Button variant="danger" size="sm" onClick={handleConfirmReset}>
+              Yes, Proceed
             </Button>
           </div>
         </div>

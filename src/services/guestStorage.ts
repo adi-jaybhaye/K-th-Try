@@ -1,6 +1,7 @@
 // ====================================================================
 // KthTry — Guest IndexedDB Storage Engine
 // Provides full persistence for guests without cloud authentication
+// Fallback hierarchy: IndexedDB -> localStorage -> in-memory Store
 // ====================================================================
 
 const DB_NAME = 'kthtry_guest_db';
@@ -22,6 +23,14 @@ interface DBStores {
 class GuestStorageEngine {
   private db: IDBDatabase | null = null;
   private isAvailable: boolean = typeof window !== 'undefined' && 'indexedDB' in window;
+  private inMemoryStore: Map<string, Map<string, any>> = new Map();
+
+  private getMemoryStore(storeName: string): Map<string, any> {
+    if (!this.inMemoryStore.has(storeName)) {
+      this.inMemoryStore.set(storeName, new Map());
+    }
+    return this.inMemoryStore.get(storeName)!;
+  }
 
   private async openDB(): Promise<IDBDatabase | null> {
     if (!this.isAvailable) return null;
@@ -59,11 +68,9 @@ class GuestStorageEngine {
         };
 
         request.onerror = () => {
-          console.warn('Could not open IndexedDB, falling back to in-memory/localStorage');
           resolve(null);
         };
-      } catch (err) {
-        console.warn('IndexedDB error:', err);
+      } catch {
         resolve(null);
       }
     });
@@ -191,49 +198,65 @@ class GuestStorageEngine {
         window.localStorage.removeItem(`kthtry_${storeName}`);
       }
     }
+
+    this.inMemoryStore.clear();
   }
 
-  // Fallbacks using localStorage
+  // Fallbacks using localStorage or in-memory map
   private fallbackGetAll<T>(storeName: keyof DBStores): T[] {
-    if (typeof window === 'undefined' || !window.localStorage) return [];
-    try {
-      const raw = window.localStorage.getItem(`kthtry_${storeName}`);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const raw = window.localStorage.getItem(`kthtry_${storeName}`);
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
     }
+    // In-memory fallback (Node / Test / SSR environments)
+    return Array.from(this.getMemoryStore(storeName).values()) as T[];
   }
 
   private fallbackGet<T>(storeName: keyof DBStores, id: string): T | null {
-    const items = this.fallbackGetAll<T>(storeName) as any[];
-    return items.find((i) => i.id === id) || null;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const items = this.fallbackGetAll<T>(storeName) as any[];
+      return items.find((i) => i.id === id) || null;
+    }
+    return (this.getMemoryStore(storeName).get(id) as T) || null;
   }
 
   private fallbackPut<T extends { id: string }>(storeName: keyof DBStores, data: T): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    try {
-      const items = this.fallbackGetAll<T>(storeName) as any[];
-      const idx = items.findIndex((i) => i.id === data.id);
-      if (idx >= 0) {
-        items[idx] = data;
-      } else {
-        items.push(data);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const items = this.fallbackGetAll<T>(storeName) as any[];
+        const idx = items.findIndex((i) => i.id === data.id);
+        if (idx >= 0) {
+          items[idx] = data;
+        } else {
+          items.push(data);
+        }
+        window.localStorage.setItem(`kthtry_${storeName}`, JSON.stringify(items));
+        return;
+      } catch (e) {
+        console.warn('localStorage put error:', e);
       }
-      window.localStorage.setItem(`kthtry_${storeName}`, JSON.stringify(items));
-    } catch (e) {
-      console.warn('localStorage put error:', e);
     }
+    // In-memory fallback
+    this.getMemoryStore(storeName).set(data.id, data);
   }
 
   private fallbackDelete(storeName: keyof DBStores, id: string): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    try {
-      const items = this.fallbackGetAll<any>(storeName);
-      const filtered = items.filter((i) => i.id !== id);
-      window.localStorage.setItem(`kthtry_${storeName}`, JSON.stringify(filtered));
-    } catch {
-      // ignore
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const items = this.fallbackGetAll<any>(storeName);
+        const filtered = items.filter((i) => i.id !== id);
+        window.localStorage.setItem(`kthtry_${storeName}`, JSON.stringify(filtered));
+        return;
+      } catch {
+        // ignore
+      }
     }
+    // In-memory fallback
+    this.getMemoryStore(storeName).delete(id);
   }
 }
 

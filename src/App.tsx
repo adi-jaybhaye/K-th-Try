@@ -16,9 +16,12 @@ import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuthPage } from './pages/AuthPage';
 
+import { LanguageProvider } from './services/LanguageContext';
+
 export function App() {
   return (
-    <BrowserRouter>
+    <LanguageProvider>
+      <BrowserRouter>
       <Routes>
         {/* Public Landing & Onboarding */}
         <Route path="/" element={<LandingPage />} />
@@ -45,6 +48,7 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+  </LanguageProvider>
   );
 }
 

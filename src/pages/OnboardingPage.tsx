@@ -41,6 +41,7 @@ export const OnboardingPage: React.FC = () => {
     Sun: 0,
   });
   const [learningPriorities, setLearningPriorities] = useState<UserPreferences['learningPriorities']>('core-first');
+  const [preferredLanguage, setPreferredLanguage] = useState<'Java' | 'C++' | 'Python'>('Java');
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Update target date when plan weeks change
@@ -94,7 +95,7 @@ export const OnboardingPage: React.FC = () => {
         hoursPerDay,
         learningPriorities,
         reviewIntervals: [1, 7, 21],
-        preferredLanguage: 'Java',
+        preferredLanguage,
         theme: 'light',
         isOnboarded: true,
       };
@@ -175,6 +176,28 @@ export const OnboardingPage: React.FC = () => {
                   <p className="text-xs text-[#7E6C7C] mt-1">{opt.desc}</p>
                 </div>
               ))}
+
+              <div className="pt-3 border-t border-[#F0EAE8]">
+                <label className="block text-xs font-semibold text-[#1D1A39] mb-1.5">
+                  Primary Programming Language Track
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Java', 'C++', 'Python'] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setPreferredLanguage(lang)}
+                      className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                        preferredLanguage === lang
+                          ? 'border-[#451952] bg-[#FAF7F6] text-[#451952] ring-2 ring-[#451952]/20 shadow-xs'
+                          : 'border-[#E2D6D4] bg-white text-[#574459] hover:bg-[#FAF7F6]'
+                      }`}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="pt-4 flex justify-end">
                 <Button variant="primary" onClick={() => setStep(2)} icon={<ArrowRight className="w-4 h-4" />} iconPosition="right">

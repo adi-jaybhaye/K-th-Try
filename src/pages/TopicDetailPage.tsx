@@ -20,20 +20,27 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { TopicProgress, SubtopicProgress } from '../types/userData';
+import { useLanguage, SupportedLanguage } from '../services/LanguageContext';
 import confetti from 'canvas-confetti';
 
 export const TopicDetailPage: React.FC = () => {
   const { topicSlug } = useParams<{ topicSlug: string }>();
   const navigate = useNavigate();
+  const { activeLanguage, setLanguage } = useLanguage();
 
   const moduleData = curriculumModules.find((m) => m.slug === topicSlug);
 
   const [activeTab, setActiveTab] = useState<'study' | 'subtopics' | 'practice' | 'resources' | 'notes'>('study');
+  const [codeLang, setCodeLang] = useState<SupportedLanguage>(activeLanguage);
   const [topicProgress, setTopicProgress] = useState<TopicProgress | null>(null);
   const [subtopicProgress, setSubtopicProgress] = useState<Record<string, SubtopicProgress>>({});
   const [personalNotes, setPersonalNotes] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+
+  useEffect(() => {
+    setCodeLang(activeLanguage);
+  }, [activeLanguage]);
 
   useEffect(() => {
     if (!moduleData) return;
@@ -115,8 +122,16 @@ export const TopicDetailPage: React.FC = () => {
     setIsSavingNotes(false);
   };
 
+  const currentLangNotes =
+    codeLang === 'C++' && moduleData.cppImplementationNotes
+      ? moduleData.cppImplementationNotes
+      : codeLang === 'Python' && moduleData.pythonImplementationNotes
+      ? moduleData.pythonImplementationNotes
+      : moduleData.javaImplementationNotes;
+
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(moduleData.javaImplementationNotes.codeTemplate);
+    if (!currentLangNotes?.codeTemplate) return;
+    navigator.clipboard.writeText(currentLangNotes.codeTemplate);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
@@ -292,29 +307,62 @@ export const TopicDetailPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Java Implementation Guidance & Template */}
+          {/* Multi-Language Implementation Guidance & Template */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Code className="w-4 h-4 text-[#1D1A39]" /> Java Implementation Template
+                  <Code className="w-4 h-4 text-[#1D1A39]" /> {codeLang} Implementation Template
                 </CardTitle>
-                <CardDescription>Idiomatic Java patterns, tricks, and pitfalls</CardDescription>
+                <CardDescription>
+                  Idiomatic {codeLang} patterns, core data structures, and gotchas
+                </CardDescription>
               </div>
-              <Button variant="outline" size="xs" onClick={handleCopyCode} icon={<Copy className="w-3.5 h-3.5" />}>
-                {copiedCode ? 'Copied!' : 'Copy Code'}
-              </Button>
+
+              <div className="flex items-center gap-2">
+                {/* Language Switcher Pills */}
+                <div className="inline-flex items-center gap-1 p-1 bg-[#FAF7F6] border border-[#E2D6D4] rounded-xl text-xs font-semibold">
+                  {(['Java', 'C++', 'Python'] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => {
+                        setCodeLang(lang);
+                        setLanguage(lang);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg transition-all text-xs font-bold ${
+                        codeLang === lang
+                          ? 'bg-[#1D1A39] text-white shadow-xs'
+                          : 'text-[#574459] hover:text-[#1D1A39] hover:bg-[#F3ECE9]'
+                      }`}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+
+                <Button variant="outline" size="xs" onClick={handleCopyCode} icon={<Copy className="w-3.5 h-3.5" />}>
+                  {copiedCode ? 'Copied!' : 'Copy Code'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="pt-0 space-y-4">
               <div className="rounded-2xl bg-[#1D1A39] text-[#FFFDFC] p-4 font-mono text-xs overflow-x-auto border border-[#451952]">
-                <pre>{moduleData.javaImplementationNotes.codeTemplate}</pre>
+                <pre>{currentLangNotes?.codeTemplate}</pre>
               </div>
+
+              {currentLangNotes?.coreDataStructures && (
+                <div className="p-3 rounded-xl border border-[#E2D6D4] bg-[#FAF7F6] text-xs">
+                  <span className="font-bold text-[#1D1A39]">Core {codeLang} Structures: </span>
+                  <span className="text-[#574459]">{currentLangNotes.coreDataStructures}</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/50">
-                  <span className="font-bold text-emerald-900 block mb-1">Recommended Tricks:</span>
+                  <span className="font-bold text-emerald-900 block mb-1">Recommended {codeLang} Tricks:</span>
                   <ul className="space-y-1 text-emerald-800 list-disc list-inside">
-                    {moduleData.javaImplementationNotes.tricks.map((t, idx) => (
+                    {currentLangNotes?.tricks.map((t, idx) => (
                       <li key={idx}>{t}</li>
                     ))}
                   </ul>
@@ -322,7 +370,7 @@ export const TopicDetailPage: React.FC = () => {
                 <div className="p-3 rounded-xl border border-rose-200 bg-rose-50/50">
                   <span className="font-bold text-rose-900 block mb-1">Gotchas &amp; Pitfalls:</span>
                   <ul className="space-y-1 text-rose-800 list-disc list-inside">
-                    {moduleData.javaImplementationNotes.gotchas.map((g, idx) => (
+                    {currentLangNotes?.gotchas.map((g, idx) => (
                       <li key={idx}>{g}</li>
                     ))}
                   </ul>

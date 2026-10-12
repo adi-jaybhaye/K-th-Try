@@ -20,6 +20,7 @@ import { curriculumModules } from '../data/curriculumData';
 import { repository } from '../services/repository';
 import { PracticeProblem } from '../types/curriculum';
 import { ProblemProgress, ProblemAttempt } from '../types/userData';
+import { useLanguage, SupportedLanguage } from '../services/LanguageContext';
 
 export const PracticePage: React.FC = () => {
   const [problemProgress, setProblemProgress] = useState<Record<string, ProblemProgress>>({});
@@ -28,6 +29,9 @@ export const PracticePage: React.FC = () => {
   const [filterDifficulty, setFilterDifficulty] = useState<DifficultyLevel | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isBlindMode, setIsBlindMode] = useState(false); // Hides topic labels for pattern testing!
+
+  const { activeLanguage } = useLanguage();
+  const [attemptLanguage, setAttemptLanguage] = useState<SupportedLanguage>('Java');
 
   // Attempt Logger Modal State
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -90,6 +94,7 @@ export const PracticePage: React.FC = () => {
 
   const handleOpenLogModal = (problem: PracticeProblem) => {
     setSelectedProblem(problem);
+    setAttemptLanguage(activeLanguage);
     setAttemptStatus('GREEN');
     setTimeSpent(20);
     setHintsUsed(false);
@@ -110,6 +115,7 @@ export const PracticePage: React.FC = () => {
       editorialUsed,
       approachNotes,
       mistakesEncountered,
+      language: attemptLanguage,
     });
 
     await loadData();
@@ -354,6 +360,29 @@ export const PracticePage: React.FC = () => {
               </div>
             </div>
 
+            {/* Implementation Language */}
+            <div>
+              <label className="block text-xs font-semibold text-[#1D1A39] mb-1.5">
+                Implementation Language
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['Java', 'C++', 'Python'] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => setAttemptLanguage(lang)}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      attemptLanguage === lang
+                        ? 'border-[#451952] bg-[#FAF7F6] text-[#451952] ring-2 ring-[#451952]/20 shadow-xs'
+                        : 'border-[#E2D6D4] bg-[#FFFDFC] text-[#574459] hover:bg-[#FAF7F6]'
+                    }`}
+                  >
+                    {lang}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Time Spent & Assistance */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -441,7 +470,12 @@ export const PracticePage: React.FC = () => {
           {historyProblemId && getProblemAttempts(historyProblemId).map((att) => (
             <div key={att.id} className="p-3 rounded-xl border border-[#F0EAE8] bg-[#FFFDFC] text-xs space-y-1">
               <div className="flex items-center justify-between">
-                <Badge status={att.attemptStatus} size="xs" />
+                <div className="flex items-center gap-2">
+                  <Badge status={att.attemptStatus} size="xs" />
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-[#FAF7F6] text-[#451952] border border-[#E2D6D4]">
+                    {att.language || 'Java'}
+                  </span>
+                </div>
                 <span className="font-mono text-[#7E6C7C]">
                   {new Date(att.attemptedAt).toLocaleString()}
                 </span>

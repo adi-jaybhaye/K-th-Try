@@ -2474,3 +2474,15 @@ public void dfs(int u, int parent, List<List<Integer>> adj, int[] disc, int[] lo
     ],
   },
 ];
+
+import { cppImplementationNotesByModule, pythonImplementationNotesByModule } from './languageImplementationData';
+
+// Enrich all 16 modules with authentic C++ and Python notes
+curriculumModules.forEach((m) => {
+  if (!m.cppImplementationNotes && cppImplementationNotesByModule[m.id]) {
+    m.cppImplementationNotes = cppImplementationNotesByModule[m.id];
+  }
+  if (!m.pythonImplementationNotes && pythonImplementationNotesByModule[m.id]) {
+    m.pythonImplementationNotes = pythonImplementationNotesByModule[m.id];
+  }
+});

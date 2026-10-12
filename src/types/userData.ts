@@ -42,6 +42,7 @@ export interface ProblemProgress {
   reviewCount: number;
   lastAttemptedAt?: string;
   tags?: string[];
+  language?: string;
 }
 
 export interface ProblemAttempt {
@@ -55,6 +56,8 @@ export interface ProblemAttempt {
   mistakesEncountered?: string;
   complexityExplained?: string;
   attemptedAt: string; // ISO timestamp
+  language?: string;
+  clientId?: string;
 }
 
 export type TaskType = 'lesson' | 'practice' | 'revision' | 'mock' | 'buffer' | 'milestone';
@@ -71,6 +74,7 @@ export interface TimelineTask {
   status: TaskStatus;
   orderIndex: number;
   notes?: string;
+  clientId?: string;
 }
 
 export interface RevisionTask {
@@ -98,7 +102,7 @@ export interface MockInterviewRecord {
 
 export interface PlacementChecklistItem {
   id: string;
-  category: 'oop' | 'dbms' | 'os' | 'cn' | 'aptitude' | 'behavioral' | 'tracks';
+  category: 'oop' | 'dbms' | 'os' | 'cn' | 'aptitude' | 'behavioral' | 'tracks' | 'resume';
   taskName: string;
   description?: string;
   isCompleted: boolean;
